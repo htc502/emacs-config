@@ -1,0 +1,24 @@
+# -*- mode: snippet -*-
+#name : bsub
+#key : bsub
+#contributor : Yanshuo Chu
+# --
+#BSUB -J ${1:`(file-name-base (buffer-file-name))`}
+~#BSUB -q ${2:$$(yas-choose-value (get-bqueues))}
+~#BSUB -W ${3:$$(yas-choose-value (get-max-time))}
+~#BSUB -n ${4:1}
+~#BSUB -M ${5:$$(yas-choose-value (get-max-mem))}
+~#BSUB -R rusage[mem=$5]
+#BSUB -B
+#BSUB -N
+~#BSUB -u ${6:ychu2@mdanderson.org}
+#BSUB -o `(string-trim (file-name-directory (buffer-file-name)) "/ssh:*\.*\.*:")`$1.o.txt
+#BSUB -e `(string-trim (file-name-directory (buffer-file-name)) "/ssh:*\.*\.*:")`$1.e.txt
+#BSUB -cwd `(string-trim (file-name-directory (buffer-file-name)) "/ssh:*\.*\.*:")`
+rm -rf `(string-trim (file-name-directory (buffer-file-name)) "/ssh:*\.*\.*:")`$1.o.txt
+rm -rf `(string-trim (file-name-directory (buffer-file-name)) "/ssh:*\.*\.*:")`$1.e.txt
+module load python/3.7.3-anaconda
+module load R/3.6.0
+~#____----____----____
+ 
+$

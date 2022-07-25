@@ -1,0 +1,62 @@
+# -*- mode: snippet -*-
+# name: seqtoolsPBSQ
+# key: seqtoolsPBSQ
+# --
+##fxns used
+fastQC2PBSQ = function(fname) {
+dat = readLines(fname)
+version = dat[1];dat = dat[-1]
+section_lines = which(grepl('^>>.*',dat))
+stopifnot(length(section_lines) %/%2 != 0)
+##PBSQ: Per base sequence quanlity
+PBSQ_start_line = section_lines[3] 
+PBSQ_end_line = section_lines[4]
+PBSQ = dat[(PBSQ_start_line+2):(PBSQ_end_line-1)]
+##to matrix for easy manipulation
+PBSQ = matrix(unlist(lapply(PBSQ, function(e) strsplit(e,split='\t')[[1]][c(1,6)])),
+ncol=2,byrow=T) ##Base-1 10th Percent-7
+PBSQ
+}
+
+##read in fastqc results
+###get file list
+flist = list.dirs(file.path($1),recursive=F)
+tmp = basename(flist);sampleIDs = tmp
+##need to unzip the result of fastqc?
+unzip = F
+if(unzip) {
+owd=getwd()
+for(i in seq_along(flist)) {
+fi = flist[i]
+setwd(fi)
+fqdir=paste0(fi,paste0(basename(fi),'_fastqc'))
+if(!file.exists(fqdir)) {
+cat('unzip fastQC result ',fi,'\n')
+unzip.cmd = paste0('unzip ',fi,'/',basename(fi),'_fastqc.zip')
+system(unzip.cmd)
+}
+}
+setwd(owd)
+}
+
+flist1 = file.path(flist,paste0(basename(flist),'_fastqc'),'fastqc_data.txt')
+###loop file list and readin data
+dat = c()
+for(i in seq_along(flist1)) {
+##parse fastqc_data.txt
+tmp  = fastQC2PBSQ(flist1[i])
+dat = cbind(dat,tmp[,2])
+}
+rownames(dat) = tmp[,1];colnames(dat) = sampleIDs
+dat = t(dat);mode(dat) = 'numeric'
+##make plot
+library(pheatmap)
+library(RColorBrewer)
+pheatmap(mat=dat,
+color = colorRampPalette((brewer.pal(n = 7, name = "RdYlBu")))(100),
+cluster_cols=F,
+cluster_rows=T,
+cellwidth=8,
+cellheight=9,
+border=F
+))

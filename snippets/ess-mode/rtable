@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: rtable
+# key: rtable
+# --
+read_tsv($1)

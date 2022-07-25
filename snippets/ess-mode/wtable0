@@ -1,0 +1,6 @@
+# -*- mode: snippet -*-
+# name: write.table
+# key: wtable0
+# --
+write.table($1, file = paste0('$2',Sys.Date(),'.tsv'),sep = '\t')
+

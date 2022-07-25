@@ -1,0 +1,60 @@
+# -*- mode: snippet -*-
+# name: seqtoolsAC
+# key: seqtoolsAC
+# --
+fastQC2AC = function(fname) {
+    library(dplyr)
+    dat = readLines(fname)
+    version = dat[1];dat = dat[-1]
+    section_lines = which(grepl('^>>.*',dat))
+    stopifnot(length(section_lines) %/%2 != 0)
+    ##AC: Adapter Content
+    AC_start_line = section_lines[21] 
+    AC_end_line = section_lines[22]
+    AC = dat[(AC_start_line+2):(AC_end_line-1)]
+    ##to matrix for easy manipulation
+    AC = tbl_df( matrix(unlist(lapply(AC, function(e) strsplit(e,split='\t')[[1]])),
+                  ncol=6,byrow=T) ) %>% mutate_if(is.character,as.numeric)
+    colnames(AC) = c('#Position','Illumina Universal Adapter',"Illumina Small RNA 3' Adapter","Illumina Small RNA 5' Adapter","Nextera Transposase Sequence","SOLID Small RNA Adapter")
+    AC
+}
+## implement facet AC plot
+##read in fastqc results
+###get file list
+flist = list.dirs(file.path($1),recursive=F)
+tmp = basename(flist);sampleIDs = tmp
+##need to unzip the result of fastqc?
+unzip = F
+if(unzip) {
+    owd=getwd()
+    for(i in seq_along(flist)) {
+        fi = flist[i]
+        setwd(fi)
+        fqdir=paste0(fi,paste0(basename(fi),'_fastqc'))
+        if(!file.exists(fqdir)) {
+            cat('unzip fastQC result ',fi,'\n')
+            unzip.cmd = paste0('unzip ',fi,'/',basename(fi),'_fastqc.zip')
+            system(unzip.cmd)
+        }
+    }
+    setwd(owd)
+}
+flist1 = file.path(flist,paste0(basename(flist),'_fastqc'),'fastqc_data.txt')
+###loop file list and readin data
+dat = c()
+for(i in seq_along(flist1)) {
+    ##parse fastqc_data.txt
+    tmp  = fastQC2AC(flist1[i])
+    tmp$Sample=sampleIDs[i]
+    dat = rbind(dat,tmp)
+}
+##make plot
+library(ggplot2)
+gdat = tidyr::gather(dat,key = Adapter,
+                     value = percent,
+                     -Sample,-`#Position`)
+ggplot(data = gdat,aes(x = `#Position`,y = percent)) +
+    geom_line(aes(color = Adapter)) +
+    scale_color_manual(values = c('blue','green','red','grey','pink')) + 
+    facet_wrap(~Sample)
+

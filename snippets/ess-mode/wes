@@ -1,0 +1,120 @@
+# -*- mode: snippet -*-
+# name: wes pipeline
+# key: wes
+# --
+
+mutects_all.jmp and mutects_all.txt are all the point mutations integrated from all the samples, after jointing with virtual germline mutations. The data process for them is seen in “WES data prepare.R”.
+1_After func.knowngene.jmp: Filetered out mutations on non-coding regions. But keep UTR, because Oncotator may not agree it’s an UTR.
+2_After exonicfunc.knowngene.jmp: Filetered out nonsynonymous SNVs.
+3_After esp6500siv2_all.jmp: esp6500siv2_all<0.005 or NA.
+4_After x1kg2015aug_max.jmp: x1kg2015aug_max < 0.005
+5_After exac_all.jmp: 5_After exac_all < 0.005
+6_site_count_VN809.jmp: site_count_VN809<5; Three new columns including t_vaf, n_vaf and n/t are added.
+7_After t_alt_count.jmp: t_alt_count>=4;
+8_After t_vaf.jmp: T_vaf>=2%
+9_After n_alt_count and n_vaf.jmp: deleting (n_alt_count>2 & n_vaf>=5%) or (n_alt_count>2 & n/t>0.2).
+10_withOncotator.jmp: Joint with oncotator annotation. Analysis did in R and genes corresponding to the same mutation was splitted.
+11_joinKeyGenes.jmp: Joint with Key genes. Did in R. Only keeps mutations on the key genes. Mutations include 'De_novo_Start_InFrame','De_novo_Start_OutOfFrame’, 'Nonsense_Mutation','Nonstop_Mutation','Splice_Site’, 'Start_Codon_SNP',’Missense_Mutation’. 
+Quality_filtered.jmp: Only include quality filtered somatic mutations, including t_alt_count>=4, T_vaf>=2%, and deleting (n_alt_count>2 & n_vaf>=5%) or (n_alt_count>2 & n/t>0.2).
+Quality&SNP_filtered.jmp: After Quality_filtered.jmp, further requiring esp6500siv2_all<0.005, x1kg2015aug_max < 0.005, 5_After exac_all < 0.005, site_count_VN809<5. This can be used for mutation signature analysis and base substitution analysis.
+############## Indel:
+virtual.germline <- fread("virtual-germline-809-count.txt")
+virtual.germline <- data.frame(virtual.germline,stringsAsFactors = F)
+colnames(virtual.germline)[1:5] <- c('chr','start','end','ref_allele','alt_allele')
+keep <- c('chr','start','end','ref_allele','alt_allele','type','length','insertlen',
+          'support','supportup','supportdown','nsample','refs','sams',
+          'func.knowngene','gene.knowngene','exonicfunc.knowngene','aaannotation','entrez_gene_id',
+          'cg69','cosmic72','cosmic72conf','snp138','clinvar_20150330','tcga_nb_v1','exac_all',
+          'x1kg2015aug_max','esp6500siv2_all',
+          'sift_score','sift_pred','lrt_score','lrt_pred','t_vaf','t_alt_count','t_ref_count',
+          'n_alt_count','n_ref_count','n_vaf','tumor_f')
+ 
+files <- list.files(path = "./",pattern = "*.tsv")
+indel.all <- NULL
+for (i in 1:120) {
+  indel <- fread(files[i])
+  indel <- data.frame(indel,stringsAsFactors = F)
+  indel <- indel[,keep]
+ 
+  # remove mutations in intergenic or intronic:
+  #table(indel$func.knowngene)
+  #iOrd <- which(indel$func.knowngene %in% c("ncRNA_intronic","intronic","intergenic"))
+  #indel <- indel[-1*iOrd,]
+ 
+  # add virtal germline mutations info:
+  indel<-indel %>% left_join(virtual.germline)
+ 
+  #name tumor:
+  indel$tumor <- substr(files[i],20,28)
+ 
+  indel$alt_allele <- substr(indel$alt_allele,1,10)
+  indel$refs <- substr(indel$refs,1,10)
+  indel$sams <- substr(indel$sams,1,10)
+  indel$alt_allele <- paste0(indel$alt_allele,"...")
+  indel$refs <- paste0(indel$refs,"...")
+  indel$sams <- paste0(indel$sams,"...")
+ 
+  indel.all <- rbind(indel.all,indel)
+  cat(i,'\n')
+}
+saveRDS(indel.all,file="indel.all.rds") # filtered dataset of indel
+ 
+#quality filter:
+indel <- readRDS("indel.all.rds")
+indel <- data.frame(indel,stringsAsFactors = F)
+indel <- indel[indel$t_alt_count>=5,] # var allel >=5
+indel <- indel[indel$tumor_f>=0.05,] # var allel >=5
+indel <- indel[,which(colnames(indel)!='site_count_VN809')]
+#virtual.germline <- virtual.germline[,c(1:4,6)] # alt_allel can be different.
+indel<-indel %>% left_join(virtual.germline)
+sum(!is.na(indel$site_count_VN809)) # all are NA.
+ 
+#filter SNPs:
+indel$esp6500siv2_all[indel$esp6500siv2_all=="."] <- NA
+indel$esp6500siv2_all <- as.numeric(indel$esp6500siv2_all)
+iOrd <- which(indel$esp6500siv2_all >= 0.005)
+indel <- indel[-1*iOrd,] # remove possible SNPs according to NHLBI-ESP 6500 exomes database SNP annotation
+indel$x1kg2015aug_max[indel$x1kg2015aug_max=="."] <- NA
+indel$x1kg2015aug_max <- as.numeric(indel$x1kg2015aug_max)
+iOrd <- which(indel$x1kg2015aug_max >= 0.005)
+indel <- indel[-1*iOrd,] # remove possible SNPs according to 1000 Genome database annotation
+indel$exac_all[indel$exac_all=="."] <- NA
+indel$exac_all <- as.numeric(indel$exac_all)
+iOrd <- which(indel$exac_all >= 0.005)
+indel <- indel[-1*iOrd,] # remove possible SNPs according to 'Exome aggregation consortium database allele frequency for all races'
+indel <- indel[indel$func.knowngene %in% c("exonic","splicing","exonic;splicing"),]
+indel <- indel[indel$length<=50,] # delete indels longer than 50bp
+ 
+# split the gene.knowngene cause some may contain multiple genes:
+iOrd <- grep(";",indel$gene.knowngene)
+multiGenes <- indel[iOrd,]
+indel2 <- indel[-1*iOrd,]
+ 
+gene <- multiGenes$gene.knowngene
+gene <- strsplit(gene,";")
+lens <- unlist(lapply(gene,length))
+iOrd <- rep(seq_len(nrow(multiGenes)),times=lens)
+gene <- unlist(gene)
+temp <- multiGenes[iOrd,]
+temp$gene.knowngene <- gene
+ 
+indel2 <- rbind(indel2,temp)
+indel2 <- unique(indel2)
+saveRDS(indel2,file="indel_qualityFiltered.rds") # filtered dataset of indel
+ 
+indel2 <- readRDS("indel_qualityFiltered.rds")
+iOrd <- which(indel2$n_alt_count>2 & indel2$n_vaf>=0.05) # remove potential germline indel
+indel2 <- indel2[-1*iOrd,]
+iOrd <- which(indel2$n_vaf/indel2$t_vaf>0.2 & indel2$n_alt_count>2) # remove potential germline indel
+indel2 <- indel2[-1*iOrd,]
+iOrd <- which((indel2$n_alt_count + indel2$n_ref_count)<4) # remove sequencing depth < 4
+indel2 <- indel2[-1*iOrd,]
+write.table(indel2,file="indel_qualityFiltered.txt",sep = "\t",quote = F,row.names = F)
+ 
+# joint with Key Genes:
+KeyGenes <- fread('/Volumes/scratch/Esophageal/WES_restults/Mutation_analysis/Key-gene-update-0726-2018.dat',
+                  header = T,sep='\t',stringsAsFactors = F)
+KeyGenes <- KeyGenes$Gene
+KeyGenes <- setdiff(KeyGenes,"BCR");KeyGenes <- c(KeyGenes,"PCLO")
+IndelKeyGenes <- indel2[indel2$gene.knowngene %in% KeyGenes,]
+save(IndelKeyGenes,file = "IndelKeyGenes.rda")

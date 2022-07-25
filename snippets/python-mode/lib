@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: library frequently used packages
+# key: lib
+# --
+import numpy as np;import pandas as pd

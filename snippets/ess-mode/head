@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: time and what does it do 
+# key: head
+# --
+## `(format-time-string "%y-%m-%d %H:%M:%S" (current-time)))`$0
+## (What it does) $0
+## (to manuscript, method or conclusion)
+## (To save life, please try to finish within 150 lines)

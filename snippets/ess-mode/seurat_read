@@ -1,0 +1,98 @@
+# -*- mode: snippet -*-
+# name: seurat pipeline readin data
+# key: seuread
+# --
+library(ggplot2)
+library(readr)
+library(Seurat)
+
+samplespath = list.dirs(path = $1,recursive = F)
+samples = basename(samplespath)
+if(length(samples) < 1) stop(paste0('Failed to find data in ',param$data))
+obj.list = list()
+for (ids in seq_along(samples)) {
+    ds = samples[ids]
+    print(ds)
+    tenx.data = Read10X(samplespath[ids])
+    tenx0 = CreateSeuratObject(counts = tenx.data, min.cells = 3,
+                               min.features = 200,
+                               project = ds)
+    obj.list[[length(obj.list)+1]] = tenx0
+}
+
+if(length(samples) > 1) {
+    combined.data = merge(x = obj.list[[1]],y = obj.list[-1],add.cell.ids = samples)
+} else {
+    combined.data = obj.list[[1]]
+}
+
+##Human: MT; Mouse: mt
+combined.data[["percent.mito"]] <- PercentageFeatureSet(combined.data, pattern = "^MT-|^Mt-") ##use ^Mt- for mouse
+##save data
+print("saving output")
+saveRDS(combined.data, file = $2)
+##load data
+print('making plots')
+QCdata = data.frame(cellID = rownames(combined.data@meta.data),
+                                 combined.data@meta.data)
+##filtering low qual cells
+filtered.data <- subset(x = combined.data,
+                        subset = nFeature_RNA > $4 &
+                            nFeature_RNA < $5 &
+                            percent.mito < $6 )
+print('log normalization')
+normalized.data <- NormalizeData(object = filtered.data,
+                                 normalization.method = "LogNormalize",
+                                 scale.factor = 1e4)
+##save data
+print('saving data')
+saveRDS(normalized.data, file = opt$out)
+
+QCdata$lowQualFilter = rep('Failed', nrow(QCdata))
+QCdata$lowQualFilter[QCdata$cellID %in% colnames(normalized.data)] = 'Pass'
+##QC plot
+gpdat = tidyr::gather(QCdata,
+                      key = type,
+                      value = value, -cellID,-orig.ident,-lowQualFilter)
+plot.pmito = ggplot(data = filter(gpdat,type == 'percent.mito'),
+                    aes(x = orig.ident,y=value))
+plot.pmito = plot.pmito + geom_boxplot(aes(color = 'pink'),outlier.shape = NA) +
+    ylab('') +
+    xlab('')  +
+    theme(axis.text.x = element_text(angle = 40,hjust = 1, vjust = 1),
+          legend.position = 'none')
+plot.nF = ggplot(data = filter(gpdat,type == 'nFeature_RNA'),
+                    aes(x = orig.ident,y=value))
+plot.nF = plot.nF + geom_boxplot(aes(color = 'pink'),outlier.shape = NA) +
+    ylab('') +
+    xlab('')  +
+    theme(axis.text.x = element_text(angle = 40,hjust = 1, vjust = 1),
+          legend.position = 'none')
+plot.nRead = ggplot(data = filter(gpdat,type == 'nCount_RNA'),
+                    aes(x = orig.ident,y=value))
+plot.nRead = plot.nRead + geom_boxplot(aes(color = 'pink'),outlier.shape = NA) +
+    ylab('') +
+    xlab('')  +
+    theme(axis.text.x = element_text(angle = 40,hjust = 1, vjust = 1),
+          legend.position = 'none')
+plot.viability = FeatureScatter(object = combined.data,
+                                feature1 = "nCount_RNA",
+                                feature2 = "percent.mito")
+plot.doublets = FeatureScatter(object = combined.data,
+                               feature1 = "nCount_RNA",
+                               feature2 = "nFeature_RNA")
+plot.ncellFiltered = ;
+plot.FracFiltered = ;
+gp.list = list(plot.nF,
+               plot.nRead,
+               plot.pmito,
+               plot.viability,
+               plot.doublets,
+               plot.ncellFiltered,
+               plot.FracFiltered)
+library(ggpubr)
+do.call(ggarrange, c(gp.list, ncol = 2, nrow = 2)) -> combined.gp
+pdf($3)
+print(combined.gp,useDingbats = F)
+dev.off()
+

@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: set input and out dir
+# key: wd
+# --
+outputD='`(directory-file-name (file-name-directory (buffer-file-name)))`$0';
+if(!dir.exists(outputD)) dir.create(outputD,recursive = T)
+setwd(outputD)

@@ -1,0 +1,25 @@
+# -*- mode: snippet -*-
+# name: bxplot using ggplot2
+# key: bxp
+# --
+library(ggplot2);library(ggsignif)
+$0 = ggplot(data = $1, aes(x=$2,y=$3)) +
+     geom_boxplot(
+              lwd=.3, ##line width
+              fatten=1, ##median line width
+              aes(color = $2),
+              outlier.shape= NA,
+              ) + ylab($4) + xlab($5) + 
+	      geom_signif(comparisons = list(c($6,
+	      $7))) + ylim(c(0,$8)) +
+	      theme_bw() + theme(panel.border = element_blank(),
+                             panel.grid.major = element_blank(),
+                             panel.grid.minor = element_blank(),
+                             axis.line = element_line(colour = "black"),
+                             legend.position='none',
+			     axis.text = element_text(
+                    color = 'black'),
+                axis.text.x = element_text(angle = 30),
+                axis.title = element_text(size = 7))
+$0
+

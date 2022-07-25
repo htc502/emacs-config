@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: library frequently used packages
+# key: lib
+# --
+rm(list = ls());library(readxl);library(readr);library(dplyr)

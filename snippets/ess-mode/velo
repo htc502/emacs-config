@@ -1,0 +1,75 @@
+# -*- mode: snippet -*-
+# name: velocity from RCA vignet
+# key: velo
+# --
+
+# R
+raw.data.counts <- t(rca_obj$raw.data)
+write.table(x = raw.data.counts, file = "raw_counts.csv", append = FALSE, quote = FALSE, sep = ",")
+
+# R
+projection.data <- as.matrix(t(rca_obj$projection.data[, -doublet_index]))
+write.table(x = projection.data, file = "projection_data.csv", append = FALSE, quote = FALSE, col.names = F, row.names = F, sep = ",")
+
+umap.data <- as.matrix(rca_obj$umap.coordinates)
+write.table(x = umap.data, file = "umap_data.csv", append = FALSE, quote = FALSE, col.names = F, row.names = F, sep = ",")
+
+# Python
+import scvelo as scv
+import scanpy as sc
+import numpy as np
+import pandas as pd
+scv.set_figure_params()
+
+# Python
+adata = sc.read_csv(filename='raw_counts.csv')
+
+#Python
+projection_data = np.loadtxt('bm_input/projection_data.csv',delimiter=',')
+projection_data.shape
+
+adata.obsm['X_pca'] = projection_data
+
+# Python
+umap_data = np.loadtxt('bm_input/umap_data.csv',delimiter=',')
+umap_data.shape
+
+adata.obsm['X_umap'] = umap_data
+
+# Python
+ldata = scv.read('merged.loom', cache=True)
+
+# Python
+merged_data = scv.utils.merge(adata, ldata)
+
+# Python
+scv.pp.filter_and_normalize(merged_data)
+scv.pp.moments(merged_data)
+scv.tl.velocity(merged_data, mode='stochastic')
+scv.tl.velocity_graph(merged_data)
+
+# Python
+merged_data.obs.to_csv('merged_data_obs.csv')
+
+
+# R
+merged_data_obs <- read.csv(file = "merged_data_obs.csv", row.names = 1)
+rca_clusters <- rca_obj$clustering.out$dynamicColorsList$Clusters
+names(rca_clusters) <- colnames(rca_obj$raw.data)
+rca_clusters <- rca_clusters[rownames(merged_data_obs)]
+
+# R
+merged_barcodes <- paste0(merged_data_obs$sample_batch, rownames(merged_data_obs))
+rca_clusters <- rca_clusters[merged_barcodes]
+
+# R
+rca_cluster_df <- data.frame(Clusters = rca_clusters)
+write.table(x = rca_cluster_df, file = "rca_cluster_df.csv", append = FALSE, quote = FALSE, col.names = T, row.names = F, sep = ",")
+
+# Python
+rca_clusters = pd.read_csv('rca_cluster_df.csv')
+merged_data.obs = rca_clusters
+
+# Python
+### Velocity embedding
+scv.pl.velocity_embedding(merged_data, basis='umap', color = ['Clusters'], legend_loc = 'right margin', palette = 'tab20', figsize = (10,10), save = 'embedding.png')

@@ -1,0 +1,160 @@
+# -*- mode: snippet -*-
+# name: snippet for RCA pipeline(reference componet nanalys)
+# key: rca
+# --
+library(dbscan)
+library(BiocManager)
+library(ggplot2)
+library(plotly)
+library(plotrix)
+library(gridExtra)
+library(dplyr)
+library(ComplexHeatmap)
+library(circlize)
+library(umap)
+library(ggpubr)
+library(irlbadbscan)
+library(BiocManager)
+library(ggplot2)
+library(plotly)
+library(plotrix)
+library(gridExtra)
+library(dplyr)
+library(ComplexHeatmap)
+library(circlize)
+library(umap)
+library(ggpubr)
+library(irlba)
+
+##load seurat
+pbmc_Seurat = readRDS($1)
+
+##some filteration
+#Perform QC using the same parameters as above
+pbmc_Seurat <- subset(pbmc_Seurat, nFeature_RNA >300 & nFeature_RNA < 5000 &
+                        nCount_RNA > 400 & nCount_RNA<30000 &
+                        percent.mito > 0.025 & percent.mito < 0.2)
+
+#Normalize the data
+pbmc_Seurat <- NormalizeData(object = pbmc_Seurat, normalization.method = "LogNormalize", scale.factor = 10000)
+pbmc_Seurat <- FindVariableFeatures(object = pbmc_Seurat, 
+                   mean.function = ExpMean, 
+                   dispersion.function = LogVMR, 
+                   x.low.cutoff = 0.0125, 
+                   x.high.cutoff = 3, 
+                   y.cutoff = 0.5, 
+                   nfeatures = 2000)
+
+#Center and scale the data
+pbmc_Seurat <- ScaleData(object = pbmc_Seurat)
+
+#Run PCA on the data
+pbmc_Seurat <- RunPCA(object = pbmc_Seurat,  npcs = 50, verbose = FALSE)
+
+#Plot different aspsects of the pca
+ElbowPlot(object = pbmc_Seurat,ndims = 50)
+
+#Find Neighbors
+pbmc_Seurat <- FindNeighbors(pbmc_Seurat, reduction = "pca", dims = 1:20)
+
+#Find Clusters
+pbmc_Seurat <- FindClusters(pbmc_Seurat, resolution = 0.2, algorithm = 1)
+
+##run umap
+#Load required libraries
+library(umap)
+library(ggplot2)
+library(randomcoloR)
+
+#Compute Umap from first 20PCs
+umap_resultS<- umap(pbmc_Seurat@reductions$pca@cell.embeddings[,c(1:20)])
+umap_resultSL<-as.data.frame(umap_resultS$layout)
+
+#Derive distinguishable colors for the seurat clusters
+myColors<-distinctColorPalette(length(unique(pbmc_Seurat$seurat_clusters)))
+
+#Generate a UMAP
+umapAll_Seurat_RCA<-ggplot(umap_resultSL,aes(x=V1,y=V2,color=pbmc_Seurat$seurat_clusters))+theme_bw(30)+
+  geom_point(size=1.5)+labs(colour="ClusterID")+theme(legend.title = element_text(size=10))+
+  guides(colour = guide_legend(override.aes = list(size=4)))+theme(legend.position = "right")+
+  theme(legend.text=element_text(size=10))+scale_color_manual(values=myColors)+xlab("UMAP1")+ylab("UMAP2")
+umapAll_Seurat_RCA
+
+##RCAv2
+library(RCAv2)
+RCA_from_Seurat<-RCAv2::createRCAObject(pbmc_Seurat@assays$RNA@counts, pbmc_Seurat@assays$RNA@data)
+
+#Compute projection
+RCA_from_Seurat<-RCAv2::dataProject(rca.obj = RCA_from_Seurat)
+
+#Cluster the projection
+RCA_from_Seurat<-RCAv2::dataClust(RCA_from_Seurat)
+
+#Estimate most likely cell type
+RCA_from_Seurat<-RCAv2::estimateCellTypeFromProjection(RCA_from_Seurat)
+
+#Simplify the cell type annotation
+SimplifiedAnnotation<-unlist(RCA_from_Seurat$cell.Type.Estimate)
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD33._Myeloid")]<-"Myeloid"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD4._Tcells")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD8._Tcells")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD14._Monocytes")]<- "Monocytes"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="BDCA4._DentriticCells")]<-"Dentritic cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L93_B.Cell_Plasma.Cell")]<- "B cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L52_Platelet")]<-"Myeloid"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L74_T.Cell_CD4.Centr..Memory")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L51_B.Cell_Bone.Marrow")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L75_T.Cell_CD4.Centr..Memory")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L85_NK.Cell_CD56Hi")]<-"NK cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD34.")]<-"Progenitor"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L45_CMP_Bone.Marrow")]<- "Progenitor"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="WholeBlood")]<- "Myeloid"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L69_Dendritic.Cell_Monocyte.derived")]<- "Myeloid"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L80_T.Cell_CD8.Eff..Memory")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L60_Monocyte_CD16")]<- "Monocytes"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L86_NK.Cell_CD56Lo")]<-"NK cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="L73_T.Cell_CD4.Naive")]<-"T cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD56._NKCells")]<-"NK cells"
+SimplifiedAnnotation[which(SimplifiedAnnotation=="CD19._BCells.neg._sel..")]<- "B cells"
+
+#Plot a umap colored by the simplified cell type labels
+myColors<-distinctColorPalette(length(unique(SimplifiedAnnotation)))
+umapAll_Seurat_Estimated_CT<-ggplot(umap_resultSL,
+aes(x=V1,y=V2,color=SimplifiedAnnotation))+
+theme_bw(30)+
+geom_point(size=1.5)+
+theme(legend.position = "bottom")+
+labs(colour="Cell type")+
+guides(colour = guide_legend(override.aes = list(size=4)))+
+theme(legend.text=element_text(size=10))+
+scale_color_manual(values=myColors)+
+ggtitle("b)")+
+xlab("UMAP1")+ylab("UMAP2")+
+theme(legend.title = element_text(size=12))
+
+#Plot a umap colored by the RCA cluster ID
+umapAll_Seurat_RCA_Clusters<-ggplot(umap_resultSL,
+aes(x=V1,y=V2,color=RCA_from_Seurat$clustering.out$dynamicColorsList[[1]]))+
+theme_bw(30)+
+geom_point(size=1.5)+
+theme(legend.position = "bottom")+
+labs(colour="RCA Cluster ID")+
+guides(colour = guide_legend(override.aes = list(size=4)))+
+theme(legend.text=element_text(size=10))+
+xlab("UMAP1")+ylab("UMAP2")+
+scale_color_identity(guide=guides(color=RCA_from_Seurat$clustering.out$dynamicColorsList[[1]]))+
+ggtitle("a)")+
+theme(legend.title = element_text(size=12))
+
+#Combine the Figures into one
+library(gridExtra)
+grid.arrange(umapAll_Seurat_RCA_Clusters,umapAll_Seurat_Estimated_CT,nrow=1)
+
+##add annotaiton back to seurat
+pbmc_Seurat[["RCA.clusters"]]<-RCA_from_Seurat$clustering.out$dynamicColorsList
+pbmc_Seurat[["cellTypeLabel"]]<-RCA_from_Seurat$cell.Type.Estimate
+pbmc_Seurat[["Projection"]]<-CreateAssayObject(data=RCA_from_Seurat$projection.data)
+
+##add umap from RCA to seurat
+RCA_from_Seurat<-computeUMAP(RCA_from_Seurat)
+pbmc_Seurat[["RCA_umap"]]<-CreateDimReducObject(embeddings=as.matrix(RCA_from_Seurat$umap.coordinates),key="RCA_umap_",assay=DefaultAssay(pbmc_Seurat))

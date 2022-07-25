@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: fname
+# key: fname
+# --
+paste0('$1',Sys.Date(),'$2')
